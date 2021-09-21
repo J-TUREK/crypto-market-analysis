@@ -20,3 +20,4 @@ main_optimal_trades_for_ohlc_data(df, subset_size=100, maxima_order=2, minima_or
 ```
 ![optimal_trade_algo_2](https://user-images.githubusercontent.com/69197760/134252240-be44e952-6048-4929-b1d8-893e9d056cf8.png)
 
+Note: Minimal graph sizes for demonstration. Works equally well on large datasets.
