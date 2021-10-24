@@ -1,9 +1,6 @@
 import binance
 import pandas as pd
-import math
-import pytz
-import time
-import ast
+import numpy as np
 import matplotlib.pyplot as plt
 
 
@@ -73,5 +70,76 @@ def technical_indicators(df: pd.DataFrame):
     df['%K'] = (df['close'] - df['14-low'])*100/(df['14-high'] -
                                                  df['14-low'])  # "Fast" Stochastic indicator
     df['%D'] = df['%K'].rolling(3).mean()  # "Slow" Stochastic indicator
+
+    return df
+
+
+def relative_magnitude(x, lookback=100):
+    return (sum(x < x.iloc[-1]) / lookback) * 100
+
+
+def rolling_count(val):
+    if val == rolling_count.previous:
+        rolling_count.count += 1
+    else:
+        rolling_count.previous = val
+        rolling_count.count = 1
+    return rolling_count.count
+
+
+rolling_count.count = 0  # static variable
+rolling_count.previous = None  # static variable
+
+
+def get_connors_rsi(df: pd.DataFrame) -> pd.DataFrame:
+
+    # Connor's RSI
+    # CRSI (3, 2, 100) = [ RSI (3 periods) + RSI Up/Down Length (2 periods) + ROC (100) ] / 3
+
+    # Calculate RSI 3-period
+    delta = df['close'].diff()
+    up = delta.clip(lower=0)
+    down = -1*delta.clip(upper=0)
+
+    ema_rsi_up = up.ewm(com=2, adjust=False).mean()
+    ema_rsi_down = down.ewm(com=2, adjust=False).mean()
+    rs_rsi = ema_rsi_up/ema_rsi_down  # Relative strength
+
+    df['RSI-3'] = 100 - (100/(1 + rs_rsi))  # RSI
+    df['RSI-3'].iloc[:3] = np.nan  # Invalid first 3 elements
+
+    df['streak'] = df['close'] > df['close'].shift()
+    df['streak-count'] = df['streak'].apply(rolling_count)
+    df.loc[
+        df['streak'] == False,
+        'streak-count'] = df.loc[df['streak'] == False, 'streak-count'] * -1
+
+    delta = df['streak-count'].diff()
+    up = delta.clip(lower=0)
+    down = -1*delta.clip(upper=0)
+
+    ema_streak_up = up.ewm(com=2, adjust=False).mean()
+    ema_streak_down = down.ewm(com=2, adjust=False).mean()
+    rs = ema_streak_up/ema_streak_down  # Relative strength
+
+    df['streak-RSI'] = 100 - (100/(1 + rs))  # RSI
+    df['streak-RSI'].iloc[:3] = np.nan  # Invalid first 14 elements
+
+    prev_close = df['close'].shift()
+    df['return-1'] = ((df['close'] - prev_close) / prev_close) * 100
+
+    df['relative-magnitude'] = df['return-1'].rolling(
+        100).apply(relative_magnitude)
+
+    df['CRSI'] = (df['RSI-3'] + df['streak-RSI'] +
+                  df['relative-magnitude']) / 3
+
+    return df
+
+
+def get_rsi_average(df: pd.DataFrame) -> pd.DataFrame:
+    '''Returns Spark's first custom technical indicator'''
+
+    df['spark1'] = (df['RSI'] + df['CRSI'] + df['stochRSI'])/3
 
     return df
